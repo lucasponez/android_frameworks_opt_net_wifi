@@ -189,6 +189,10 @@ public class ClientModeImpl extends StateMachine {
     private boolean mVerboseLoggingEnabled = false;
     private final WifiPermissionsWrapper mWifiPermissionsWrapper;
 
+    private String mApInterfaceName;
+    private String mDataInterfaceName;
+    private boolean mIfaceIsUp;
+
     /* debug flag, indicating if handling of ASSOCIATION_REJECT ended up blacklisting
      * the corresponding BSSID.
      */
@@ -354,6 +358,8 @@ public class ClientModeImpl extends StateMachine {
     // machine when generating the NetworkInfo for the broadcast.
     private DetailedState mNetworkAgentState;
     private SupplicantStateTracker mSupplicantStateTracker;
+
+    private int mWifiLinkLayerStatsSupported = 4; // Temporary disable
 
     // Indicates that framework is attempting to roam, set true on CMD_START_ROAM, set false when
     // wifi connects or fails to connect
@@ -1301,18 +1307,22 @@ public class ClientModeImpl extends StateMachine {
             loge("getWifiLinkLayerStats called without an interface");
             return null;
         }
+        WifiLinkLayerStats stats = null;
         mLastLinkLayerStatsUpdate = mClock.getWallClockMillis();
-        WifiLinkLayerStats stats = mWifiNative.getWifiLinkLayerStats(mInterfaceName);
-        if (stats != null) {
-            mOnTime = stats.on_time;
-            mTxTime = stats.tx_time;
-            mRxTime = stats.rx_time;
-            mRunningBeaconCount = stats.beacon_rx;
-            mWifiInfo.updatePacketRates(stats, mLastLinkLayerStatsUpdate);
-        } else {
-            long mTxPkts = mFacade.getTxPackets(mInterfaceName);
-            long mRxPkts = mFacade.getRxPackets(mInterfaceName);
-            mWifiInfo.updatePacketRates(mTxPkts, mRxPkts, mLastLinkLayerStatsUpdate);
+        if (mWifiLinkLayerStatsSupported > 0) {
+            stats = mWifiNative.getWifiLinkLayerStats(mInterfaceName);
+            if (stats == null) {
+                mWifiLinkLayerStatsSupported -= 1;
+            } else {
+                mOnTime = stats.on_time;
+                mTxTime = stats.tx_time;
+                mRxTime = stats.rx_time;
+                mRunningBeaconCount = stats.beacon_rx;
+                mWifiInfo.updatePacketRates(stats, mLastLinkLayerStatsUpdate);
+            }
+        } else { // LinkLayerStats are broken or unsupported
+            long mTxPkts = mFacade.getTxPackets(mDataInterfaceName);
+            long mRxPkts = mFacade.getRxPackets(mDataInterfaceName);
         }
         return stats;
     }
